@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <link data-name="vs/editor/editor.main" rel="stylesheet"
+    href="node_modules/monaco-editor/min/vs/editor/editor.main.css">
+    <script src='https://code.jquery.com/jquery-1.11.3.min.js'></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.0/moment.min.js" rossorigin="anonymous"></script>
+    <script src="lib/VSS.SDK.min.js"></script>
+    <style>
+        body {
+            background-color: rgb(0, 67, 117);
+            color: white;
+            margin: 10px;    
+            font-family: "Segoe UI VSS (Regular)","-apple-system",BlinkMacSystemFont,"Segoe UI",sans-serif;
+        }
+
+    </style>
+</head>
+<body>
+    <div>
+        <input type="date" id="from" />
+        <input type="date" id="to" />
+        <input type="button" value="refresh" onclick="fetchWorkItems();"/>
+        <div id="result_count" style="display: inline;">loading ⌛</div>
+    </div>
+    <div id="monaco" style="width:100%;height:700px;border:1px solid grey">></div>
+    <script type="text/javascript">
+
+        var diffEditor = null;
+        $('#from').val(new Date(new Date().getTime() - 2* 24 * 60 * 60 * 1000).toISOString().slice(0,10));
+        $('#to').val(new Date().toISOString().slice(0,10));
+
+        var fields = [
+            "System.WorkItemType",
+            "System.State",
+            "System.Reason",
+            "System.CreatedDate",
+            "System.CreatedBy",
+            "System.ChangedDate",
+            "System.ChangedBy",
+            "System.CommentCount",
+            "System.Title",
+            "System.Description",
+            "Microsoft.VSTS.Scheduling.StoryPoints",
+            "System.AssignedTo",
+            "System.AreaPath",
+            "System.IterationPath",
+            "System.Tags"
+        ];
+
+        VSS.init(
+            {
+                moduleLoaderConfig : {
+                    paths : {
+                        'vs' : 'node_modules/monaco-editor/min/vs'
+                    }
+                }
+            }
+        );
+
+        fetchWorkItems();
+        function fetchWorkItems(){
+            $('#result_count').html('loading ⌛');
+
+            VSS.require(["vs/editor/editor.main","VSS/Service", "TFS/WorkItemTracking/RestClient"], function (monaco, VSS_Service, TFS_Wit_WebApi) {
+                
+                var projectId = VSS.getWebContext().project.id;
+                var witClient = VSS_Service.getCollectionClient(TFS_Wit_WebApi.WorkItemTrackingHttpClient);
+
+                var from = new Date($('#from').val());
+                var to = new Date($('#to').val());
+
+                // load workitems ID
+                witClient.queryByWiql({ query : 'Select [System.Id], [System.ChangedDate] FROM WorkItems Where [System.ChangedDate] >= \'' + convertDate(from) + '\' AND [System.ChangedDate] <= \'' + convertDate(to) + '\''}, projectId).then(result => {
+
+                    // only query full items if we have some workitems
+                    if(result.workItems.length > 0){
+                        var ids = result.workItems.flatMap(o => o.id);
+
+                        var promises = [];
+
+                        promises = ids.map( o=> new Promise(resolve => {
+                            witClient.getComments(projectId, o).then(data => {
+                                    resolve(data);
+                                })
+                        }));
+
+                        promises.push(
+                            new Promise(resolve => {
+                            witClient.getWorkItems(ids, fields).then((result_to) => {
+
+                                // we remove ids which weren't existing at 'from' date for now querying them (otherwise devops generate HTTP 400)
+                                result_to.forEach(o=> {
+                                    if(new Date(o.fields['System.CreatedDate']) > from){
+                                        ids.splice(ids.indexOf(o.id), 1);
+                                    }
+                                })
+                            
+                                if(ids.length == 0){
+                                    resolve({
+                                            from : [],
+                                            to : result_to 
+                                            });
+                                } else {
+                                    witClient.getWorkItems(ids, fields,from).then((result_from) => {
+
+                                        resolve({
+                                            from : result_from,
+                                            to : result_to 
+                                            });
+                                        });
+                                }
+                            });
+                        }));
+                        
+                        Promise.all(promises).then( results => {
+
+                            // inject comments in snapshot, in results, we should have one result with to & from, other are comments
+
+                            var baseline = results.find(o=> o.from != undefined && o.to != undefined);
+                            results.filter(o => o.totalCount >0).forEach(o=> {
+
+                                // all array rows are for the same workitem, grabbing the workitem from first
+                                var workItemId = o.comments[0].workItemId;
+                                baseline.to.find(o=> o.id == workItemId).comments = o.comments;
+
+                                // we inject in 'from' snapshot all comments which were already created at that moment
+                                var existingcomments = o.comments.filter(o=> o.modifiedDate < from);
+                                if(existingcomments.length > 0){
+                                    baseline.from.find(o=> o.id == workItemId).comments = existingcomments;
+                                }
+                            });
+
+                            if(diffEditor == null){
+                                diffEditor = monaco.editor.createDiffEditor(document.getElementById("monaco"));
+                            }
+
+                            var left = monaco.editor.createModel(stringifyWorkItems(baseline.from), "plaintext");
+                            var right = monaco.editor.createModel(stringifyWorkItems(baseline.to), "plaintext");
+
+                            diffEditor.setModel({
+                                original: left,
+                                modified: right
+                            });
+
+                            $('#result_count').html(result.workItems.length + ' item' + (result.workItems.length > 1 ? 's' : ''));
+
+                        }).catch(ex=>{
+                            console.error(ex);
+                        });
+                    }
+                });
+            });
+        }
+
+        function stringifyWorkItems(workitems){
+
+            var result = '';
+
+            workitems.forEach(o=> {
+                result += '🔵 ' + o.fields['System.Title'] + '\n';
+                result += '\t📐' + o.fields['System.WorkItemType']  + ' #' + o.id + ' (' + o.fields['System.State'] + ') \t' + o.url.replace('/_apis/wit/workItems/', '/_workitems/edit/') + '\n';
+
+                var createdon = moment(o.fields['System.CreatedDate']);
+                var modifiedon = moment(o.fields['System.ChangedDate'])
+                result += '\t📆 created : ' + createdon.format('dddd D MMM') + ' (' + createdon.fromNow()+ ')' + '\tmodified : ' + modifiedon.format('dddd D MMM') + ' (' + modifiedon.fromNow()+ ')\n';
+                result += '\t💡' + o.fields['System.AreaPath'] + '\t' + o.fields['System.IterationPath'] + '\n\n';
+
+                var descriptiondiv = document.createElement("div");
+                descriptiondiv.innerHTML = o.fields['System.Description'] || '';
+                var description = (descriptiondiv.textContent || descriptiondiv.innerText || '');
+
+                // split with return line description by 80 chars
+                result += splitter('\t', description, 80).join('\n')+ '\n';
+
+                if(o.comments != undefined){
+                    result += "\n\t💬 comments\n";
+
+                    o.comments.forEach(o=> {
+                        var modifiedon = moment(o.modifiedDate);
+                        result += '\t\t◽' + o.modifiedBy.displayName + ' on ' + modifiedon.format('dddd D MMM') + ' (' + modifiedon.fromNow() + ')\n';
+                        
+                        var commentdiv = document.createElement("div");
+                        commentdiv.innerHTML = o.text || '';
+                        var comment = (commentdiv.textContent || commentdiv.innerText || '');
+
+                        result += splitter('\t\t', comment, 80).join('\n')+ '\n\n';
+                    });
+                }
+
+                result += '\n\n';
+            });
+
+            return result;
+        }
+
+        function convertDate(date){
+            var formateddate = ("0" + (date.getMonth() + 1)).slice(-2) + '/' + ("0" + date.getDate()).slice(-2) + '/' + date.getFullYear().toString().slice(-2);
+            return formateddate;
+        }
+
+        function splitter(front, str, l){
+            var strs = [];
+            while(str.length > l){
+                var pos = str.substring(0, l).lastIndexOf(' ');
+                pos = pos <= 0 ? l : pos;
+                strs.push(front + str.substring(0, pos));
+                var i = str.indexOf(' ', pos)+1;
+                if(i < pos || i > pos+l)
+                    i = pos;
+                str = str.substring(i);
+            }
+            strs.push(front + str);
+            return strs;
+        }
+
+    </script>
+</body>
+</html>

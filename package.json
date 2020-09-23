@@ -1,0 +1,17 @@
+{
+  "name": "devops-snapshot",
+  "version": "1.0.6",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepack": "tfx extension create"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "vss-web-extension-sdk": "^5.141.0",
+    "monaco-editor": "0.20.0"
+  }
+}
