@@ -173,7 +173,7 @@
 
                 var createdon = moment(o.fields['System.CreatedDate']);
                 var modifiedon = moment(o.fields['System.ChangedDate'])
-                result += '\t📆 created : ' + createdon.format('dddd D MMM') + ' (' + createdon.fromNow()+ ')' + '\tmodified : ' + modifiedon.format('dddd D MMM') + ' (' + modifiedon.fromNow()+ ')\n';
+                result += '\t📆 modified : ' + modifiedon.format('dddd D MMM') + ' (' + modifiedon.fromNow()+ ')' + '\t created ' + createdon.fromNow()+ '\n';
                 result += '\t💡' + o.fields['System.AreaPath'] + '\t' + o.fields['System.IterationPath'] + '\n\n';
 
                 var descriptiondiv = document.createElement("div");
