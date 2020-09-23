@@ -85,39 +85,47 @@
                                 })
                         }));
 
-                        promises.push(
-                            new Promise(resolve => {
-                            witClient.getWorkItems(ids, fields).then((result_to) => {
+                        // REST API limited to 200 workitems at once
+                        chunk(ids, 200).forEach(ids_chunk=> {
+                                promises.push(
+                                new Promise(resolve => {
+                                witClient.getWorkItems(ids_chunk, fields).then((result_to) => {
 
-                                // we remove ids which weren't existing at 'from' date for now querying them (otherwise devops generate HTTP 400)
-                                result_to.forEach(o=> {
-                                    if(new Date(o.fields['System.CreatedDate']) > from){
-                                        ids.splice(ids.indexOf(o.id), 1);
-                                    }
-                                })
-                            
-                                if(ids.length == 0){
-                                    resolve({
-                                            from : [],
-                                            to : result_to 
-                                            });
-                                } else {
-                                    witClient.getWorkItems(ids, fields,from).then((result_from) => {
-
+                                    // we remove ids which weren't existing at 'from' date for now querying them (otherwise devops generate HTTP 400)
+                                    result_to.forEach(o=> {
+                                        if(new Date(o.fields['System.CreatedDate']) > from){
+                                            ids_chunk.splice(ids_chunk.indexOf(o.id), 1);
+                                        }
+                                    })
+                                
+                                    if(ids.length == 0){
                                         resolve({
-                                            from : result_from,
-                                            to : result_to 
+                                                from : [],
+                                                to : result_to 
+                                                });
+                                    } else {
+                                        witClient.getWorkItems(ids_chunk, fields,from).then((result_from) => {
+
+                                            resolve({
+                                                from : result_from,
+                                                to : result_to 
+                                                });
                                             });
-                                        });
-                                }
-                            });
-                        }));
+                                    }
+                                });
+                            }));
+                        });
                         
                         Promise.all(promises).then( results => {
 
+                            // concatenate results (if workitems count > 200)
+                            var baseline = { from : [], to : []};
+                            results.filter(o=> o.from != undefined && o.to != undefined).forEach(o => {
+                                baseline.from = baseline.from.concat(o.from);
+                                baseline.to = baseline.to.concat(o.to);
+                            });
+                            
                             // inject comments in snapshot, in results, we should have one result with to & from, other are comments
-
-                            var baseline = results.find(o=> o.from != undefined && o.to != undefined);
                             results.filter(o => o.totalCount >0).forEach(o=> {
 
                                 // all array rows are for the same workitem, grabbing the workitem from first
@@ -214,6 +222,13 @@
             }
             strs.push(front + str);
             return strs;
+        }
+
+        function chunk(arr, chunkSize) {
+            var R = [];
+            for (var i=0,len=arr.length; i<len; i+=chunkSize)
+                R.push(arr.slice(i,i+chunkSize));
+            return R;
         }
 
     </script>
