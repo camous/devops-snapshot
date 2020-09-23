@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <link data-name="vs/editor/editor.main" rel="stylesheet"
@@ -31,21 +31,21 @@
         $('#to').val(new Date().toISOString().slice(0,10));
 
         var fields = [
-            "System.WorkItemType",
-            "System.State",
-            "System.Reason",
-            "System.CreatedDate",
-            "System.CreatedBy",
-            "System.ChangedDate",
-            "System.ChangedBy",
-            "System.CommentCount",
-            "System.Title",
-            "System.Description",
-            "Microsoft.VSTS.Scheduling.StoryPoints",
-            "System.AssignedTo",
-            "System.AreaPath",
-            "System.IterationPath",
-            "System.Tags"
+            'System.WorkItemType',
+            'System.State',
+            'System.Reason',
+            'System.CreatedDate',
+            'System.CreatedBy',
+            'System.ChangedDate',
+            'System.ChangedBy',
+            'System.CommentCount',
+            'System.Title',
+            'System.Description',
+            'Microsoft.VSTS.Scheduling.StoryPoints',
+            'System.AssignedTo',
+            'System.AreaPath',
+            'System.IterationPath',
+            'System.Tags'
         ];
 
         VSS.init(
@@ -71,7 +71,7 @@
                 var to = new Date($('#to').val());
 
                 // load workitems ID
-                witClient.queryByWiql({ query : 'Select [System.Id], [System.ChangedDate] FROM WorkItems Where [System.ChangedDate] >= \'' + convertDate(from) + '\' AND [System.ChangedDate] <= \'' + convertDate(to) + '\''}, projectId).then(result => {
+                witClient.queryByWiql({ query : 'Select [System.Id], [System.ChangedDate] FROM WorkItems Where [System.TeamProject] = @project AND [System.ChangedDate] >= \'' + convertDate(from) + '\' AND [System.ChangedDate] <= \'' + convertDate(to) + '\''}, projectId).then(result => {
 
                     // only query full items if we have some workitems
                     if(result.workItems.length > 0){
