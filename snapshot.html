@@ -179,7 +179,7 @@
 
                 var descriptiondiv = document.createElement("div");
                 descriptiondiv.innerHTML = o.fields['System.Description'] || '';
-                var description = (descriptiondiv.textContent || descriptiondiv.innerText || '');
+                var description = descriptiondiv.innerText || '';
 
                 // split with return line description by 80 chars
                 result += splitter('\t', description, 80).join('\n')+ '\n';
@@ -193,7 +193,7 @@
                         
                         var commentdiv = document.createElement("div");
                         commentdiv.innerHTML = o.text || '';
-                        var comment = (commentdiv.textContent || commentdiv.innerText || '');
+                        var comment = commentdiv.innerText || '';
 
                         result += splitter('\t\t', comment, 80).join('\n')+ '\n\n';
                     });
