@@ -179,6 +179,11 @@
 
                 var descriptiondiv = document.createElement("div");
                 descriptiondiv.innerHTML = o.fields['System.Description'] || '';
+
+                // remove some markdown default fields
+                descriptiondiv.querySelector('#__mdStyle').remove();
+			    descriptiondiv.querySelector('#__md').remove();
+
                 var description = descriptiondiv.innerText || '';
 
                 // split with return line description by 80 chars
