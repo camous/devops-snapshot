@@ -5,7 +5,6 @@
     "version": "1.0.20",
     "name": "Workitem Snapshot",
     "description": "Spot project evolution between two dates at a glance",
-    "baseUri" : "https://localhost",
     "public": false,
     "categories": [
         "Azure Boards"
