@@ -72,25 +72,29 @@
                 var to = new Date($('#to').val());
 
                 // load workitems ID
-                witClient.queryByWiql({ query : 'Select [System.Id], [System.ChangedDate] FROM WorkItems Where [System.TeamProject] = @project AND [System.ChangedDate] >= \'' + convertDate(from) + '\' AND [System.ChangedDate] <= \'' + convertDate(to) + '\''}, projectId).then(result => {
+                witClient.queryByWiql({ query : 'Select [System.Id], [System.ChangedDate] FROM WorkItems Where [System.TeamProject] = @project AND [System.ChangedDate] > \'' + convertDate(from) + '\' AND [System.ChangedDate] <= \'' + convertDate(to) + '\''}, projectId).then(result => {
 
                     // only query full items if we have some workitems
                     if(result.workItems.length > 0){
                         var ids = result.workItems.flatMap(o => o.id);
 
                         var promises = [];
-
-                        promises = ids.map( o=> new Promise(resolve => {
-                            witClient.getComments(projectId, o).then(data => {
-                                    resolve(data);
-                                })
-                        }));
+                        var promisescomments = [];
 
                         // REST API limited to 200 workitems at once
                         chunk(ids, 200).forEach(ids_chunk=> {
                                 promises.push(
                                 new Promise(resolve => {
                                 witClient.getWorkItems(ids_chunk, fields).then((result_to) => {
+
+                                    // retrieve comments
+                                    result_to.filter(o=> o.fields['System.CommentCount'] > 0).forEach(o=>{
+                                        promisescomments.push(new Promise(resolve => {
+                                                witClient.getComments(projectId, o.id).then(data => {
+                                                resolve(data);
+                                            });
+                                        }));
+                                    });
 
                                     // we remove ids which weren't existing at 'from' date for now querying them (otherwise devops generate HTTP 400)
                                     result_to.forEach(o=> {
@@ -125,34 +129,36 @@
                                 baseline.from = baseline.from.concat(o.from);
                                 baseline.to = baseline.to.concat(o.to);
                             });
-                            
+
+                            Promise.all(promisescomments).then( commentresults => {
+
                             // inject comments in snapshot, in results, we should have one result with to & from, other are comments
-                            results.filter(o => o.totalCount >0).forEach(o=> {
+                                commentresults.forEach(o=> {
+                                    // all array rows are for the same workitem, grabbing the workitem from first
+                                    var workItemId = o.comments[0].workItemId;
+                                    baseline.to.find(o=> o.id == workItemId).comments = o.comments;
 
-                                // all array rows are for the same workitem, grabbing the workitem from first
-                                var workItemId = o.comments[0].workItemId;
-                                baseline.to.find(o=> o.id == workItemId).comments = o.comments;
+                                    // we inject in 'from' snapshot all comments which were already created at that moment
+                                    var existingcomments = o.comments.filter(o=> o.modifiedDate < from);
+                                    if(existingcomments.length > 0){
+                                        baseline.from.find(o=> o.id == workItemId).comments = existingcomments;
+                                    }
+                                });
 
-                                // we inject in 'from' snapshot all comments which were already created at that moment
-                                var existingcomments = o.comments.filter(o=> o.modifiedDate < from);
-                                if(existingcomments.length > 0){
-                                    baseline.from.find(o=> o.id == workItemId).comments = existingcomments;
+                                if(diffEditor == null){
+                                    diffEditor = monaco.editor.createDiffEditor(document.getElementById("monaco"));
                                 }
+
+                                var left = monaco.editor.createModel(stringifyWorkItems(baseline.from), "plaintext");
+                                var right = monaco.editor.createModel(stringifyWorkItems(baseline.to), "plaintext");
+
+                                diffEditor.setModel({
+                                    original: left,
+                                    modified: right
+                                });
+
+                                $('#result_count').html(result.workItems.length + ' item' + (result.workItems.length > 1 ? 's' : ''));
                             });
-
-                            if(diffEditor == null){
-                                diffEditor = monaco.editor.createDiffEditor(document.getElementById("monaco"));
-                            }
-
-                            var left = monaco.editor.createModel(stringifyWorkItems(baseline.from), "plaintext");
-                            var right = monaco.editor.createModel(stringifyWorkItems(baseline.to), "plaintext");
-
-                            diffEditor.setModel({
-                                original: left,
-                                modified: right
-                            });
-
-                            $('#result_count').html(result.workItems.length + ' item' + (result.workItems.length > 1 ? 's' : ''));
 
                         }).catch(ex=>{
                             console.error(ex);
@@ -178,7 +184,12 @@
                 result += '\t💡' + o.fields['System.AreaPath'] + '\t' + o.fields['System.IterationPath'] + '\n\n';
 
                 var descriptiondiv = document.createElement("div");
-                descriptiondiv.innerHTML = o.fields['System.Description'] || '';
+
+                // we have to remove in pure regex img tag before, otherwise innerHTML call would download them all
+                var descriptionraw = o.fields['System.Description'] || '';
+                var descriptionraw = descriptionraw.replace(/<img .*?>/g,''); 
+
+                descriptiondiv.innerHTML = descriptionraw;
 
                 // remove some markdown default fields
                 if(descriptiondiv.querySelector('#__mdStyle') != null)  
@@ -200,6 +211,7 @@
                         result += '\t\t◽' + o.modifiedBy.displayName + ' on ' + modifiedon.format('dddd D MMM') + ' (' + modifiedon.fromNow() + ')\n';
                         
                         var commentdiv = document.createElement("div");
+                        o.text = o.text.replace(/<img .*?>/g,''); // strip img before using div, otherwise they would be downloaded
                         commentdiv.innerHTML = o.text || '';
                         var comment = commentdiv.innerText || '';
 
