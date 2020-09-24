@@ -181,8 +181,11 @@
                 descriptiondiv.innerHTML = o.fields['System.Description'] || '';
 
                 // remove some markdown default fields
-                $('#__mdStyle').remove();
-                $('#__md').remove();
+                if(descriptiondiv.querySelector('#__mdStyle') != null)  
+                    descriptiondiv.querySelector('#__mdStyle').remove();
+
+                if(descriptiondiv.querySelector('#__md') != null)  
+                    descriptiondiv.querySelector('#__md').remove();
 
                 var description = descriptiondiv.innerText || '';
 

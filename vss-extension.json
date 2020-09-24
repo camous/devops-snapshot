@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "devops-snapshot",
     "publisher": "FabienCamous",
-    "version": "1.0.16",
+    "version": "1.0.17",
     "name": "Workitem Snapshot",
     "description": "Spot project evolution between two dates at a glance",
     "public": false,
