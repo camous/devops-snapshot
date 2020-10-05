@@ -146,7 +146,9 @@
                                 });
 
                                 if(diffEditor == null){
-                                    diffEditor = monaco.editor.createDiffEditor(document.getElementById("monaco"));
+                                    diffEditor = monaco.editor.createDiffEditor(document.getElementById("monaco"), {
+                                        renderSideBySide: false
+                                    });
                                 }
 
                                 var left = monaco.editor.createModel(stringifyWorkItems(baseline.from), "plaintext");
